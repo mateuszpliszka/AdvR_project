@@ -89,12 +89,17 @@ server <- function(input, output, session) {
     
     level <- my_data_object$table[my_data_object$table$id == my_data_object$variableID,"level"]
     if (!is.null(level)) {
-      print(class(level))
       values <- c(0:level)
-      print(values)
       updateSelectInput(session, "Level", choices = setNames(values ,values))
     }
-
+  })
+  
+  observeEvent(input$Level, {
+    my_data_object$level <- input$Level
+    if (!is.null(my_data_object$level)) {
+      my_data_object$finalData <- my_data_object$get_data(my_data_object$variableID,my_data_object$level)
+    }
+    print(my_data_object$finalData)
   })
   
 }
@@ -108,9 +113,11 @@ Data <- R6Class("Data",
                   additional = NULL,
                   variableID = NULL,
                   table = NULL,
+                  level = NULL,
                   language = NULL,
+                  finalData = NULL,
                   # Constructor
-                  initialize = function(category = "", group = "", subgroup = "", additional = "", variableID = "", language = "pl") {
+                  initialize = function(category = "", group = "", subgroup = "", additional = "", variableID = "", level ="", language = "pl") {
                     self$category <- category
                     self$group <- group
                     self$subgroup <- subgroup
@@ -118,6 +125,8 @@ Data <- R6Class("Data",
                     self$variableID <- variableID
                     self.language <- language
                     self$table <- NULL
+                    self$level <- level
+                    self$finalData <- NULL
                   },
                   
                   available_data = function() {
@@ -154,8 +163,11 @@ Data <- R6Class("Data",
                     url = paste0("https://bdl.stat.gov.pl/api/v1/data/by-variable/", id ,"?unit-level=" , level, "&format=json&page-size=100")
                     response <- GET(url)
                     data = fromJSON(rawToChar(response$content))
-                    unnested_data <- unnest(data$results, values)
-                    return(unnested_data)
+                    if (!is.null(data$results)){
+                      unnested_data <- unnest(data$results, values)
+                      return(unnested_data)
+                    }
+                    return(NULL)
                   }
                   
                   
