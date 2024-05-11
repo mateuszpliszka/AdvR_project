@@ -2,11 +2,15 @@ library(httr)
 library(jsonlite)
 library(tidyr)
 library(shiny)
+library(shinyjs)
+library(R6)
 
 #To DO:
 # page-size - jaki dobrac???
 # przetestowac get_data
+# defensive - kiedy nie ma polaczenia z internetem
 
+Sys.setenv(LANG = "en")
 
 ui <- fluidPage(
   selectInput(inputId = "Category", 
@@ -18,9 +22,11 @@ ui <- fluidPage(
   selectInput(inputId = "Subgroup", 
               label = "Subgroup",
               choices = NULL),
-  selectInput(inputId = "Subgroup", 
-              label = "Subgroup",
+  uiOutput("additional_option_input"),
+  selectInput(inputId = "Variable",
+              label = "Variable",
               choices = NULL),
+  
 )
 server <- function(input, output, session) {
   observe({
@@ -30,7 +36,6 @@ server <- function(input, output, session) {
   
   observeEvent(input$Category, {
     category_id <- input$Category
-    print(category_id)
     data <- available_data_group(category_id)
     updateSelectInput(session, "Group", choices = setNames(data$id ,data$name))
   })
@@ -42,10 +47,31 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$Subgroup, {
-    subGroup_id <- input$Subgroup
-    data <- available_data_subgroup(subGroup_id)
-    updateSelectInput(session, "Subgroup", choices = setNames(data$id ,data$name))
+    if (input$Subgroup != "")
+    {
+      subGroup_id <- input$Subgroup
+      data <- available_data_subgroup(subGroup_id)
+      print(data)
+      if( "n2" %in% colnames(data)) {
+        updateSelectInput(session, "Variable", choices = setNames(data$n2 ,data$n2))
+        output$additional_option_input <- renderUI({
+          selectInput(inputId = "Additional_option", 
+                      label = "Additional option",
+                      choices = setNames(data$n1, data$n1))
+        })
+        updateSelectInput(session, "Additional_option", choices = setNames(data$n1 ,data$n1))
+        
+      }
+      else{
+        updateSelectInput(session, "Variable", choices = setNames(data$n1 ,data$n1))
+        output$additional_option_input <- renderUI({})
+        
+      }
+    }
+    
+    
   })
+  
 }
 shinyApp(ui, server)
 
@@ -95,7 +121,6 @@ get_data <- function(id,level) {
   response <- GET(url)
   data = fromJSON(rawToChar(response$content))
   unnested_data <- unnest(data$results, values)
-  
   return(unnested_data)
 }
 
@@ -109,6 +134,49 @@ xx<-get_data("283959","2")
 
 xx
 
+
+
+Data <- R6Class("Data",
+                public = list(
+                  category = NULL,
+                  group = NULL,
+                  subgroup = NULL,
+                  additional = NULL,
+                  variable = NULL,
+                  table = NULL,
+                  # Constructor
+                  initialize = function(category = "", group = "", subgroup = "", additional = "", variable = "") {
+                    self$category <- category
+                    self$group <- group
+                    self$subgroup <- subgroup
+                    self$additional <- additional
+                    self$variable <- variable
+                    self$table <- NULL
+                  },
+                  
+                  available_data = function() {
+                    url <- "https://bdl.stat.gov.pl/api/v1/subjects?lang=pl&format=json&page-size=100"
+                    response <- httr::GET(url)
+                    data <- jsonlite::fromJSON(httr::content(response, "text", encoding = "UTF-8"))
+                    # Extract content which we need
+                    return(data$results[c("id", "name")])
+                  }
+                  
+                  available_data_group <- function(parentId) {
+                    self$category <- parentId
+                    url = paste0("https://bdl.stat.gov.pl/api/v1/subjects?lang=",language,"&parent-id=", parentId, "&format=json&page-size=100")
+                    response <- GET(url)
+                    data = fromJSON(rawToChar(response$content))
+                    # Extraction content which we need
+                    return (data$results[c("id","name")])
+                  }
+                )
+)
+
+# Create an object of the Data class
+my_data_object <- Data$new()
+
+my_data_object$available_data()
 
 # Does not matter - tests
 
@@ -134,6 +202,8 @@ data$results[c("id","name")]
 
 url = paste0("https://bdl.stat.gov.pl/api/v1/variables?subject-id=P3183&format=json")
 response <- GET(url)
+data = fromJSON(rawToChar(response$content))
+data
 data = fromJSON(rawToChar(response$content))
 if (is.element("n2", names(data$results))){
   (data$results[c("id","n1","n2","level")])
