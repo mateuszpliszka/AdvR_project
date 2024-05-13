@@ -6,7 +6,10 @@ library(shinyjs)
 library(R6)
 library(ggplot2)
 library(sf)
-
+library(raster)
+library(dplyr)
+options(scipen = 999)
+library(RColorBrewer)
 #To DO:
 # page-size - jaki dobrac???
 # przetestowac get_data
@@ -47,6 +50,7 @@ ui <- fluidPage(
               choices = NULL),
   actionButton(inputId = "Generate_map",
                label = "Generate map",),
+  plotOutput("mapPlot")
   
 )
 server <- function(input, output, session) {
@@ -156,13 +160,16 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$Generate_map, {
-    my_data_object$create_map
-    print("1223")
+    woj_merged <- my_data_object$create_map()
+    
+    output$mapPlot <- renderPlot({
+      
+      bb <-ggplot(woj_merged$geometry)+
+        geom_sf(aes(fill=as.factor(woj_merged$val))) + scale_fill_brewer(type = "seq", palette=1, direction = 1, aesthetics = "colour")
+      print(bb)
+    })
   })
-  
 }
-
-shinyApp(ui, server)
 
 Data <- R6Class("Data",
                 public = list(
@@ -265,33 +272,21 @@ Data <- R6Class("Data",
                   
                   create_map = function()
                   {
-                    
-                    self$finalData_exactYear<- as.numeric(self$finalData_exactYear)
-                    
-                    options("sfSHAPE_RESTORE_SHX" = "YES")
-                    map_nuts0 <- read_sf("gminy\\gminy.shp")
-                    map_nuts0$id <- as.character(as.numeric(map_nuts0$JPT_KOD_JE))
-                    map_nuts0
-                    class(map_nuts0)
-                    
-                    map_nuts0 <- map_nuts0 %>%
-                      left_join(self$finalData_exactYear, by = "id")
-                    map_nuts0
-                    print("Zaczynam robic mape")
-                    print(ggplot(map_nuts0) +
-                      geom_sf(aes(fill = val)) +
-                      scale_fill_viridis_c() +  
-                      labs(title = "Mapa",
-                           fill = "....") +
-                      theme_minimal())
-                    print("Skonczylem robic mape")
+                    View(self$finalData_exactYear)
+                    print(self$level)
+                    if(self$level==2){
+                      sf_woj<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\wojewodztwa.shp")
+                      self$finalData_exactYear$JPT_KOD_JE<-substr(self$finalData_exactYear$id, 3, 4)
+                      woj_merged <- merge(x = sf_woj, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
+                      return(woj_merged)
+                    }
                   }
                 ),
                 
                 
 )
 
-
+shinyApp(ui, server)
 
 
 
@@ -433,5 +428,5 @@ url = paste0("https://bdl.stat.gov.pl/api/v1/data/by-variable/3643?unit-level=2&
 response <- GET(url)
 data = fromJSON(rawToChar(response$content))
 data
-
-
+mysf<-read_sf("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\wojewodztwa.shp")
+view(mysf)
