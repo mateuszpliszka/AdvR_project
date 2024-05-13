@@ -4,6 +4,8 @@ library(tidyr)
 library(shiny)
 library(shinyjs)
 library(R6)
+library(ggplot2)
+library(sf)
 
 #To DO:
 # page-size - jaki dobrac???
@@ -11,13 +13,21 @@ library(R6)
 # defensive - kiedy nie ma polaczenia z internetem
 # jesli n, n2 sie zmieni to odswiezyc 
 # limit zapytan zapezpieczenie
-# problem page-size max - 100 
+# problem page-size max - 100 - w trakcie rozwiazywania 
+#### Mateusz
+# funkcja create_map parametry wejściowe data.frame z kolumnami id - kod jednostki; name- nazwa jednostki, year - wszystkie te same, val - wartosc dla jednostki wyplucic ggpolota
+# defensive - sprawdzac czy wszyskie id z sa z tego samego poziomu terytorialnego 
+# jako jeden z paramtetrów wejsciowych moze byc tez poziom
+
+
 
 Sys.setenv(LANG = "en")
 
 ui <- fluidPage(
+  textInput(inputId = "X-ClientId",
+            label = "X-ClientId",),
   selectInput(inputId = "Category", 
-              label = "Category",
+              label = "Category_1",
               choices = NULL),
   selectInput(inputId = "Group", 
               label = "Group",
@@ -35,6 +45,8 @@ ui <- fluidPage(
   selectInput(inputId = "Year",
               label = "Year",
               choices = NULL),
+  actionButton(inputId = "Generate_map",
+               label = "Generate map",),
   
 )
 server <- function(input, output, session) {
@@ -66,7 +78,6 @@ server <- function(input, output, session) {
       data <- my_data_object$available_data_subgroup(subGroup_id)
       if( "n3" %in% colnames(data)) {
         updateSelectInput(session, "Variable", choices = setNames(data$n3 ,data$n3))
-        print(data)
         output$additional_option_input <- renderUI({
           tagList(
             selectInput(inputId = "Additional_option_1", 
@@ -139,9 +150,16 @@ server <- function(input, output, session) {
     my_data_object$year <- input$Year
     if (!is.null(my_data_object$year)) {
       my_data_object$finalData_exactYear <- my_data_object$finalData_allYears[my_data_object$finalData_allYears$year == my_data_object$year, ]
+      print(my_data_object$finalData_exactYear)
     }
+    print("Observer 6")
   })
-  print("Observer 6")
+  
+  observeEvent(input$Generate_map, {
+    my_data_object$create_map
+    print("1223")
+  })
+  
 }
 
 shinyApp(ui, server)
@@ -206,19 +224,78 @@ Data <- R6Class("Data",
                       (data$results[c("id","n1","level")])
                     }
                   },
-                  
-                  get_data = function(id,level) {
-                    url = paste0("https://bdl.stat.gov.pl/api/v1/data/by-variable/", id ,"?unit-level=" , level, "&format=json&page-size=100")
-                    response <- GET(url)
-                    data = fromJSON(rawToChar(response$content))
-                    if (!is.null(data$results)){
-                      unnested_data <- unnest(data$results, values)
+                  get_data = function(id,level, client_id = NULL) {
+                    url <- paste0("https://bdl.stat.gov.pl/api/v1/data/by-variable/", id ,"?unit-level=" , level, "&format=json&page-size=100")
+                    data <- self$multiplequeries(url,NULL)
+                    if (!is.null(data)){
+                      unnested_data <- unnest(data, values)
                       return(unnested_data)
                     }
                     return(NULL)
+                    
+                  },
+                  
+                  multiplequeries = function(url, client_id = NULL) {
+                    all_data <- data.frame()  # Initialize an empty data frame to store all responses
+                    response <- GET(url, add_headers("X-ClientId" = client_id))
+                    data <- fromJSON(rawToChar(response$content))
+
+                    if (!is.null(data$errors)) {
+                      print(data$errors)
+                      return (NULL)
+                    }
+                    all_data <- data$results
+                    
+                    while (!is.null(data$links$`next`)) {
+                      url <- data$links$`next`
+                      response <- GET(url, add_headers("X-ClientId" = client_id))
+                      data <- fromJSON(rawToChar(response$content))
+                      if (!is.null(data$errors)) {
+                        print(data$errors)
+                        return (all_data)
+                      }
+                      print(data$results)
+                      print(all_data)
+                      all_data <- rbind(all_data, data$results)  
+                      url <- data$links$`next`
+
+                    }
+                    return(all_data)
+                  },
+                  
+                  create_map = function()
+                  {
+                    
+                    self$finalData_exactYear<- as.numeric(self$finalData_exactYear)
+                    
+                    options("sfSHAPE_RESTORE_SHX" = "YES")
+                    map_nuts0 <- read_sf("gminy\\gminy.shp")
+                    map_nuts0$id <- as.character(as.numeric(map_nuts0$JPT_KOD_JE))
+                    map_nuts0
+                    class(map_nuts0)
+                    
+                    map_nuts0 <- map_nuts0 %>%
+                      left_join(self$finalData_exactYear, by = "id")
+                    map_nuts0
+                    print("Zaczynam robic mape")
+                    print(ggplot(map_nuts0) +
+                      geom_sf(aes(fill = val)) +
+                      scale_fill_viridis_c() +  
+                      labs(title = "Mapa",
+                           fill = "....") +
+                      theme_minimal())
+                    print("Skonczylem robic mape")
                   }
-                )
+                ),
+                
+                
 )
+
+
+
+
+
+
 
 
 
@@ -233,7 +310,7 @@ data$results
 language = "pl"
 available_data <- function() {
   url = paste0("https://bdl.stat.gov.pl/api/v1/subjects?lang=pl&format=json&page-size=100")
-  response <- GET(url)
+  response <- GET(url, add_headers("X-ClientId" = NULL))
   data = fromJSON(rawToChar(response$content))
   # Extraction content which we need
   return (data$results[c("id","name")])
@@ -259,15 +336,49 @@ available_data_subgroup <- function(parentId) {
     (data$results[c("id","n1","level")])
   }
 }
-
+client_id = "fceda050-86d0-4b96-0476-08dc73494bf9"
 # Do testu
-get_data <- function(id,level) {
-  url = paste0("https://bdl.stat.gov.pl/api/v1/data/by-variable/", id ,"?unit-level=" , level, "&format=json&page-size=100")
-  response <- GET(url)
-  data = fromJSON(rawToChar(response$content))
-  unnested_data <- unnest(data$results, values)
+get_data <- function(id, level) {
+  url <- paste0("https://bdl.stat.gov.pl/api/v1/data/by-variable/", id ,"?unit-level=" , level, "&format=json&page-size=100")
+  data <- multiplequeries(url,client_id)
+  unnested_data <- unnest(data, values)
   return(unnested_data)
+  
+  # all_data <- data.frame()  # Initialize an empty data frame to store all responses
+  # response <- GET(url, add_headers("X-ClientId" = client_id))
+  # 
+  # data <- fromJSON(rawToChar(response$content))
+  # print(data)
+  # print(data$links$self)
+  # print(data$links$`next`)
+  # 
+  # while (!is.null(data$links$`next`)) {
+  #   unnested_data <- unnest(data$results, values)
+  #   all_data <- bind_rows(all_data, unnested_data)  
+  #   url <- data$links$`next`
+  #   response <- GET(url, add_headers("X-ClientId" = client_id))
+  #   data <- fromJSON(rawToChar(response$content))
+  #   print(data)
+  # }
+  # return(all_data)
 }
+
+
+# multiplequeries = function(url, client_id) {
+#   print("gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg")
+#   all_data <- data.frame()  # Initialize an empty data frame to store all responses
+#   response <- GET(url, add_headers("X-ClientId" = client_id))
+#   data <- fromJSON(rawToChar(response$content))
+#   print(data)
+#   while (!is.null(data$links$`next`)) {
+#     all_data <- bind_rows(all_data, data$results)  
+#     url <- data$links$`next`
+#     response <- GET(url, add_headers("X-ClientId" = client_id))
+#     data <- fromJSON(rawToChar(response$content))
+#     print(data)
+#   }
+#   return(all_data)
+# }
 
 available_data()
 
@@ -275,9 +386,9 @@ available_data_group("K15")
 
 z123 <- available_data_subgroup("P3183")
 z123[z123$n1 == "1 kwartał", ]
-xx<-get_data("283959","2")
+xx2<-get_data("76447","6")
 
-xx
+xx2
 
 
 
@@ -322,4 +433,5 @@ url = paste0("https://bdl.stat.gov.pl/api/v1/data/by-variable/3643?unit-level=2&
 response <- GET(url)
 data = fromJSON(rawToChar(response$content))
 data
+
 
