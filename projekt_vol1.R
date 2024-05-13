@@ -9,6 +9,9 @@ library(R6)
 # page-size - jaki dobrac???
 # przetestowac get_data
 # defensive - kiedy nie ma polaczenia z internetem
+# jesli n, n2 sie zmieni to odswiezyc 
+# limit zapytan zapezpieczenie
+# problem page-size max - 100 
 
 Sys.setenv(LANG = "en")
 
@@ -29,6 +32,9 @@ ui <- fluidPage(
   selectInput(inputId = "Level",
               label = "Level",
               choices = NULL),
+  selectInput(inputId = "Year",
+              label = "Year",
+              choices = NULL),
   
 )
 server <- function(input, output, session) {
@@ -43,12 +49,14 @@ server <- function(input, output, session) {
     category_id <- input$Category
     data <- my_data_object$available_data_group(category_id)
     updateSelectInput(session, "Group", choices = setNames(data$id ,data$name))
+    print("Observer 1")
   })
   
   observeEvent(input$Group, {
     group_id <- input$Group
     data <- my_data_object$available_data_group(group_id)
     updateSelectInput(session, "Subgroup", choices = setNames(data$id ,data$name))
+    print("Observer 2")
   })
   
   observeEvent(input$Subgroup, {
@@ -56,14 +64,31 @@ server <- function(input, output, session) {
     {
       subGroup_id <- input$Subgroup
       data <- my_data_object$available_data_subgroup(subGroup_id)
-      if( "n2" %in% colnames(data)) {
+      if( "n3" %in% colnames(data)) {
+        updateSelectInput(session, "Variable", choices = setNames(data$n3 ,data$n3))
+        print(data)
+        output$additional_option_input <- renderUI({
+          tagList(
+            selectInput(inputId = "Additional_option_1", 
+                        label = "Additional option",
+                        choices = setNames(data$n1, data$n1)),
+            selectInput(inputId = "Additional_option_2", 
+                        label = "Additional option 2",
+                        choices = setNames(data$n2, data$n2))
+          )
+        })
+        updateSelectInput(session, "Additional_option_1", choices = setNames(data$n1 ,data$n1))
+        updateSelectInput(session, "Additional_option_2", choices = setNames(data$n2, data$n2))
+        
+      }
+      else if( "n2" %in% colnames(data)) {
         updateSelectInput(session, "Variable", choices = setNames(data$n2 ,data$n2))
         output$additional_option_input <- renderUI({
-          selectInput(inputId = "Additional_option", 
+          selectInput(inputId = "Additional_option_1", 
                       label = "Additional option",
                       choices = setNames(data$n1, data$n1))
         })
-        updateSelectInput(session, "Additional_option", choices = setNames(data$n1 ,data$n1))
+        updateSelectInput(session, "Additional_option_1", choices = setNames(data$n1 ,data$n1))
         
       }
       else{
@@ -72,19 +97,24 @@ server <- function(input, output, session) {
         
       }
     }
+    print("Observer 3")
   })
   
-  observeEvent(input$Variable, {
-    if( "n2" %in% colnames(my_data_object$table)) {
-      n1 <- input$Additional_option
+  observeEvent(c(input$Variable, input$Additional_option_1, input$Additional_option_2), {
+    if( "n3" %in% colnames(my_data_object$table)) {
+      n1 <- input$Additional_option_1
+      n2 <- input$Additional_option_2
+      n3 <- input$Variable
+      my_data_object$variableID <- my_data_object$table[(my_data_object$table$n1 == n1 & my_data_object$table$n2 == n2 & my_data_object$table$n3 == n3),"id"]
+    }
+    else if( "n2" %in% colnames(my_data_object$table)) {
+      n1 <- input$Additional_option_1
       n2 <- input$Variable
       my_data_object$variableID <- my_data_object$table[(my_data_object$table$n1 == n1 & my_data_object$table$n2 == n2),"id"]
-      print(my_data_object$table[(my_data_object$table$n1 == n1 & my_data_object$table$n2 == n2),"id"])
     }
     else{
       n1 <- input$Variable
       my_data_object$variableID <- my_data_object$table[my_data_object$table$n1 == n1,"id"]
-      print(my_data_object$table[my_data_object$table$n1 == n1,"id"])
     }
     
     level <- my_data_object$table[my_data_object$table$id == my_data_object$variableID,"level"]
@@ -92,17 +122,28 @@ server <- function(input, output, session) {
       values <- c(0:level)
       updateSelectInput(session, "Level", choices = setNames(values ,values))
     }
+    print("Observer 4")
   })
   
   observeEvent(input$Level, {
     my_data_object$level <- input$Level
     if (!is.null(my_data_object$level)) {
-      my_data_object$finalData <- my_data_object$get_data(my_data_object$variableID,my_data_object$level)
+      my_data_object$finalData_allYears <- my_data_object$get_data(my_data_object$variableID,my_data_object$level)
+      updateSelectInput(session, "Year", choices = setNames(my_data_object$finalData_allYears$year ,my_data_object$finalData_allYears$year))
     }
-    print(my_data_object$finalData)
+    print(my_data_object$finalData_allYears)
+    print("Observer 5")
   })
   
+  observeEvent(input$Year, {
+    my_data_object$year <- input$Year
+    if (!is.null(my_data_object$year)) {
+      my_data_object$finalData_exactYear <- my_data_object$finalData_allYears[my_data_object$finalData_allYears$year == my_data_object$year, ]
+    }
+  })
+  print("Observer 6")
 }
+
 shinyApp(ui, server)
 
 Data <- R6Class("Data",
@@ -115,7 +156,9 @@ Data <- R6Class("Data",
                   table = NULL,
                   level = NULL,
                   language = NULL,
-                  finalData = NULL,
+                  finalData_allYears = NULL,
+                  finalData_exactYear = NULL,
+                  year = NULL,
                   # Constructor
                   initialize = function(category = "", group = "", subgroup = "", additional = "", variableID = "", level ="", language = "pl") {
                     self$category <- category
@@ -126,13 +169,16 @@ Data <- R6Class("Data",
                     self.language <- language
                     self$table <- NULL
                     self$level <- level
-                    self$finalData <- NULL
+                    self$finalData_allYears <- NULL
+                    self$finalData_exactYear <- NULL
+                    self$year <- NULL
                   },
                   
                   available_data = function() {
                     url <- "https://bdl.stat.gov.pl/api/v1/subjects?lang=pl&format=json&page-size=100"
                     response <- httr::GET(url)
                     data <- jsonlite::fromJSON(httr::content(response, "text", encoding = "UTF-8"))
+                    print(data)
                     # Extract content which we need
                     return(data$results[c("id", "name")])
                   },
@@ -152,7 +198,9 @@ Data <- R6Class("Data",
                     response <- GET(url)
                     data = fromJSON(rawToChar(response$content))
                     self$table <- data$results
-                    if (is.element("n2", names(data$results))){
+                    if (is.element("n3", names(data$results))){
+                      (data$results[c("id","n1","n2","n3","level")])}
+                    else if (is.element("n2", names(data$results))){
                       (data$results[c("id","n1","n2","level")])
                     } else {
                       (data$results[c("id","n1","level")])
@@ -169,8 +217,6 @@ Data <- R6Class("Data",
                     }
                     return(NULL)
                   }
-                  
-                  
                 )
 )
 
