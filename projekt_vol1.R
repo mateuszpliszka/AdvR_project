@@ -295,9 +295,9 @@ Data <- R6Class("Data",
                     if(self$level==5){
                       
                       sf_pow<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\powiaty.shp")
-                      self$finalData_exactYear$JPT_KOD_JE<-substr(self$finalData_exactYear$id, 3, 6)
+                      self$finalData_exactYear$JPT_KOD_JE<-paste0(substr(self$finalData_exactYear$id, 3, 4), substr(self$finalData_exactYear$id, 8, 9))
                       merged <- merge(x = sf_pow, y = self$finalData_exactYear, by = "JPT_KOD_JE", all.x=TRUE)
-                      #merged$val <- cut(merged$val, breaks = 10)
+                      merged$val <- cut(merged$val, breaks = 10)
                       #quantiles <- quantile(merged$val, probs = seq(0, 1, by = 1/15), na.rm = TRUE)
 
                       #bins <- cut(merged$val, breaks = quantiles, labels = FALSE, include.lowest = TRUE)
@@ -309,14 +309,14 @@ Data <- R6Class("Data",
                     #gminy
                     if(self$level==6){
                       sf_gmi<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\gminy.shp")
-                      self$finalData_exactYear$JPT_KOD_JE<-substr(self$finalData_exactYear$id, 3, 9)
+                      self$finalData_exactYear$JPT_KOD_JE<-paste0(substr(self$finalData_exactYear$id, 3, 4), substr(self$finalData_exactYear$id, 8, 12))
                       merged <- merge(x = sf_gmi, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
+                      View(self$finalData_exactYear)
+                      merged$val <- cut(merged$val, breaks = 10)
                       return(merged)
                     }
                   }
                 ),
-                
-                
 )
 
 shinyApp(ui, server)
