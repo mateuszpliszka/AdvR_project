@@ -27,32 +27,26 @@ library(RColorBrewer)
 Sys.setenv(LANG = "en")
 
 ui <- fluidPage(
-  textInput(inputId = "X-ClientId",
-            label = "X-ClientId",),
-  selectInput(inputId = "Category", 
-              label = "Category_1",
-              choices = NULL),
-  selectInput(inputId = "Group", 
-              label = "Group",
-              choices = NULL),
-  selectInput(inputId = "Subgroup", 
-              label = "Subgroup",
-              choices = NULL),
-  uiOutput("additional_option_input"),
-  selectInput(inputId = "Variable",
-              label = "Variable",
-              choices = NULL),
-  selectInput(inputId = "Level",
-              label = "Level",
-              choices = NULL),
-  selectInput(inputId = "Year",
-              label = "Year",
-              choices = NULL),
-  actionButton(inputId = "Generate_map",
-               label = "Generate map",),
-  plotOutput("mapPlot")
-  
+  fluidRow(
+    column(width = 3,
+           textInput(inputId = "X-ClientId", label = "X-ClientId"),
+           selectInput(inputId = "Category", label = "Category_1", choices = NULL),
+           selectInput(inputId = "Group", label = "Group", choices = NULL),
+           selectInput(inputId = "Subgroup", label = "Subgroup", choices = NULL),
+           uiOutput("additional_option_input"),
+           selectInput(inputId = "Variable", label = "Variable", choices = NULL),
+           selectInput(inputId = "Level", label = "Level", choices = NULL),
+           selectInput(inputId = "Year", label = "Year", choices = NULL),
+           actionButton(inputId = "Generate_map", label = "Generate map")
+    ),
+    column(width = 9,
+           div(style = "display: flex; align-items: center; justify-content: center; height: 90vh; width: 90%;",
+               plotOutput("mapPlot", width = "90%", height = "90%")  # Adjust width and height here
+           )
+    )
+  )
 )
+
 server <- function(input, output, session) {
   language= "pl"
   my_data_object <- Data$new()
@@ -297,12 +291,17 @@ Data <- R6Class("Data",
                       sf_pow<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\powiaty.shp")
                       self$finalData_exactYear$JPT_KOD_JE<-paste0(substr(self$finalData_exactYear$id, 3, 4), substr(self$finalData_exactYear$id, 8, 9))
                       merged <- merge(x = sf_pow, y = self$finalData_exactYear, by = "JPT_KOD_JE", all.x=TRUE)
-                      merged$val <- cut(merged$val, breaks = 10)
-                      #quantiles <- quantile(merged$val, probs = seq(0, 1, by = 1/15), na.rm = TRUE)
-
-                      #bins <- cut(merged$val, breaks = quantiles, labels = FALSE, include.lowest = TRUE)
-                      #merged$bin <- bins
-                      #View(merged)
+                      #merged$val <- cut(merged$val, breaks = 10)
+                      # quantiles <- quantile(merged$val, probs = seq(0, 1, by = 1/10), na.rm = TRUE)
+                      # 
+                      # bins <- cut(merged$val, breaks = quantiles, labels = FALSE, dig.lab = 5)
+                      # merged$val <- bins
+                      num_bins <- 10
+                      data_range <- range(merged$val, na.rm = TRUE)
+                      bin_width <- diff(data_range) / num_bins
+                      breaks <- seq(min(merged$val, na.rm = TRUE), max(merged$val, na.rm = TRUE) + bin_width, by = bin_width)
+                      bins <- cut(merged$val, breaks = breaks, labels = FALSE, include.lowest = TRUE)
+                      merged$val <- bins
                       return(merged)
                       
                     }
@@ -312,7 +311,17 @@ Data <- R6Class("Data",
                       self$finalData_exactYear$JPT_KOD_JE<-paste0(substr(self$finalData_exactYear$id, 3, 4), substr(self$finalData_exactYear$id, 8, 12))
                       merged <- merge(x = sf_gmi, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
                       View(self$finalData_exactYear)
-                      merged$val <- cut(merged$val, breaks = 10)
+                      #merged$val <- cut(merged$val, breaks = 10)
+                      # quantiles <- quantile(merged$val, probs = seq(0, 1, by = 1/10), na.rm = TRUE)
+                      # 
+                      # bins <- cut(merged$val, breaks = quantiles, labels = FALSE, dig.lab = 5)
+                      # merged$val <- bins
+                      num_bins <- 10
+                      data_range <- range(merged$val, na.rm = TRUE)
+                      bin_width <- diff(data_range) / num_bins
+                      breaks <- seq(min(merged$val, na.rm = TRUE), max(merged$val, na.rm = TRUE) + bin_width, by = bin_width)
+                      bins <- cut(merged$val, breaks = breaks, labels = FALSE, include.lowest = TRUE)
+                      merged$val <- bins
                       return(merged)
                     }
                   }
@@ -322,7 +331,7 @@ Data <- R6Class("Data",
 shinyApp(ui, server)
 
 
-
+?cut
 
 
 
