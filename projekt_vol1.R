@@ -160,17 +160,19 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$Generate_map, {
-    woj_merged <- my_data_object$create_map()
+    merged <- my_data_object$create_map()
     
     output$mapPlot <- renderPlot({
       
-      bb <-ggplot(woj_merged$geometry)+
-        geom_sf(aes(fill=as.factor(woj_merged$val))) + scale_fill_brewer(type = "seq", palette=1, direction = 1, aesthetics = "colour")
+      
+      bb <-ggplot(merged$geometry)+
+        geom_sf(aes(fill=merged$val)) + 
+        scale_fill_brewer(type = "seq", palette=1, direction = 1, aesthetics = "colour")
       print(bb)
+    
     })
   })
 }
-
 Data <- R6Class("Data",
                 public = list(
                   category = NULL,
@@ -272,13 +274,44 @@ Data <- R6Class("Data",
                   
                   create_map = function()
                   {
+    
                     View(self$finalData_exactYear)
                     print(self$level)
+                    #wojewodztwa
                     if(self$level==2){
                       sf_woj<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\wojewodztwa.shp")
                       self$finalData_exactYear$JPT_KOD_JE<-substr(self$finalData_exactYear$id, 3, 4)
-                      woj_merged <- merge(x = sf_woj, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
-                      return(woj_merged)
+                      merged <- merge(x = sf_woj, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
+                      return(merged)
+                    }
+                    #polska
+                    if(self$level==0){
+                      sf_pol<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\polska.shp")
+                      self$finalData_exactYear$JPT_KOD_JE<-substr(self$finalData_exactYear$id, 1, 1)
+                      merged <- merge(x = sf_pol, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
+                      return(merged)
+                    }
+                    #powiaty
+                    if(self$level==5){
+                      
+                      sf_pow<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\powiaty.shp")
+                      self$finalData_exactYear$JPT_KOD_JE<-substr(self$finalData_exactYear$id, 3, 6)
+                      merged <- merge(x = sf_pow, y = self$finalData_exactYear, by = "JPT_KOD_JE", all.x=TRUE)
+                      #merged$val <- cut(merged$val, breaks = 10)
+                      #quantiles <- quantile(merged$val, probs = seq(0, 1, by = 1/15), na.rm = TRUE)
+
+                      #bins <- cut(merged$val, breaks = quantiles, labels = FALSE, include.lowest = TRUE)
+                      #merged$bin <- bins
+                      #View(merged)
+                      return(merged)
+                      
+                    }
+                    #gminy
+                    if(self$level==6){
+                      sf_gmi<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\gminy.shp")
+                      self$finalData_exactYear$JPT_KOD_JE<-substr(self$finalData_exactYear$id, 3, 9)
+                      merged <- merge(x = sf_gmi, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
+                      return(merged)
                     }
                   }
                 ),
@@ -287,8 +320,6 @@ Data <- R6Class("Data",
 )
 
 shinyApp(ui, server)
-
-
 
 
 
