@@ -25,6 +25,8 @@ library(RColorBrewer)
 
 Sys.setenv(LANG = "en")
 
+my_path <- getwd()
+
 ui <- fluidPage(
   fluidRow(
     column(width = 3,
@@ -36,7 +38,9 @@ ui <- fluidPage(
            selectInput(inputId = "Variable", label = "Variable", choices = NULL),
            selectInput(inputId = "Level", label = "Level", choices = NULL),
            selectInput(inputId = "Year", label = "Year", choices = NULL),
-           actionButton(inputId = "Generate_map", label = "Generate map")
+           actionButton(inputId = "Generate_map", label = "Generate map"),
+           selectInput(inputId = "select_unit", label = "Select unit", choices = NULL),
+           actionButton(inputId = "Generate_plot", label = "Generate plot")
     ),
     column(width = 9,
            div(style = "display: flex; align-items: center; justify-content: center; height: 90vh; width: 90%;",
@@ -138,6 +142,7 @@ server <- function(input, output, session) {
     if (!is.null(my_data_object$level)) {
       my_data_object$finalData_allYears <- my_data_object$get_data(my_data_object$variableID,my_data_object$level)
       updateSelectInput(session, "Year", choices = setNames(my_data_object$finalData_allYears$year ,my_data_object$finalData_allYears$year))
+      updateSelectInput(session, "select_unit", choices = setNames(my_data_object$finalData_allYears$name ,my_data_object$finalData_allYears$name))
     }
     print(my_data_object$finalData_allYears)
     print("Observer 5")
@@ -165,6 +170,16 @@ server <- function(input, output, session) {
     
     })
   })
+  
+  observeEvent(input$select_unit, {
+    my_data_object$unit <- input$select_unit
+    print(input$select_unit)
+  })
+  
+  observeEvent(input$Generate_plot, {
+    print("Chce zrobić plot")
+    my_data_object$create_plot()
+  })
 }
 Data <- R6Class("Data",
                 public = list(
@@ -179,6 +194,7 @@ Data <- R6Class("Data",
                   finalData_allYears = NULL,
                   finalData_exactYear = NULL,
                   year = NULL,
+                  unit = NULL,
                   # Constructor
                   initialize = function(category = "", group = "", subgroup = "", additional = "", variableID = "", level ="",language = "pl") {
                     self$category <- category
@@ -192,6 +208,7 @@ Data <- R6Class("Data",
                     self$finalData_allYears <- NULL
                     self$finalData_exactYear <- NULL
                     self$year <- NULL
+                    self$unit <- NULL
                   },
                   
                   available_data = function() {
@@ -272,14 +289,14 @@ Data <- R6Class("Data",
                     print(self$level)
                     #wojewodztwa
                     if(self$level==2){
-                      sf_woj<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\wojewodztwa.shp")
+                      sf_woj<-st_read(paste0(my_path,"\\wojewodztwa.shp"))
                       self$finalData_exactYear$JPT_KOD_JE<-substr(self$finalData_exactYear$id, 3, 4)
                       merged <- merge(x = sf_woj, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
                       return(merged)
                     }
                     #polska
                     if(self$level==0){
-                      sf_pol<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\polska.shp")
+                      sf_pol<-st_read(paste0(my_path,"\\polska.shp"))
                       self$finalData_exactYear$JPT_KOD_JE<-substr(self$finalData_exactYear$id, 1, 1)
                       merged <- merge(x = sf_pol, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
                       return(merged)
@@ -287,7 +304,7 @@ Data <- R6Class("Data",
                     #powiaty
                     if(self$level==5){
                       
-                      sf_pow<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\powiaty.shp")
+                      sf_pow<-st_read(paste0(my_path,"\\powiaty.shp"))
                       self$finalData_exactYear$JPT_KOD_JE<-paste0(substr(self$finalData_exactYear$id, 3, 4), substr(self$finalData_exactYear$id, 8, 9))
                       merged <- merge(x = sf_pow, y = self$finalData_exactYear, by = "JPT_KOD_JE", all.x=TRUE)
 
@@ -297,13 +314,17 @@ Data <- R6Class("Data",
                     }
                     #gminy
                     if(self$level==6){
-                      sf_gmi<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\gminy.shp")
+                      sf_gmi<-st_read(paste0(my_path,"\\gminy.shp"))
                       self$finalData_exactYear$JPT_KOD_JE<-paste0(substr(self$finalData_exactYear$id, 3, 4), substr(self$finalData_exactYear$id, 8, 12))
                       merged <- merge(x = sf_gmi, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
                       View(self$finalData_exactYear)
                       return(merged)
                     }
+                  },
+                  create_plot = function(){
+                    print("Ale Mateusz musi zrobic funkcje najpierw")
                   }
+                  
                 ),
 )
 
