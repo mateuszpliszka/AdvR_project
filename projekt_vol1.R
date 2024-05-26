@@ -11,18 +11,17 @@ library(dplyr)
 options(scipen = 999)
 library(RColorBrewer)
 #To DO:
-# page-size - jaki dobrac???
-# przetestowac get_data
 # defensive - kiedy nie ma polaczenia z internetem
-# jesli n, n2 sie zmieni to odswiezyc 
+# jesli n, n2 sie zmieni to odswiezyc
 # limit zapytan zapezpieczenie
-# problem page-size max - 100 - w trakcie rozwiazywania 
+# problem page-size max - 100 - w trakcie rozwiazywania
+# rok najmniejszy - brak renderu
+# freezowanie apki podczas pobierania
 #### Mateusz
-# funkcja create_map parametry wejściowe data.frame z kolumnami id - kod jednostki; name- nazwa jednostki, year - wszystkie te same, val - wartosc dla jednostki wyplucic ggpolota
-# defensive - sprawdzac czy wszyskie id z sa z tego samego poziomu terytorialnego 
 # jako jeden z paramtetrów wejsciowych moze byc tez poziom
 
-
+#srednia gmin w danym powiecie (np jeśli użytkownik wybierze dochod gmin policzyc srednia gmin dla kazdego
+#powiatu/woj i wtedy wyrenderować)
 
 Sys.setenv(LANG = "en")
 
@@ -41,7 +40,7 @@ ui <- fluidPage(
     ),
     column(width = 9,
            div(style = "display: flex; align-items: center; justify-content: center; height: 90vh; width: 90%;",
-               plotOutput("mapPlot", width = "90%", height = "90%")  # Adjust width and height here
+               plotOutput("mapPlot", width = "90%", height = "90%")
            )
     )
   )
@@ -152,7 +151,7 @@ server <- function(input, output, session) {
     }
     print("Observer 6")
   })
-  
+   
   observeEvent(input$Generate_map, {
     merged <- my_data_object$create_map()
     
@@ -161,7 +160,7 @@ server <- function(input, output, session) {
       
       bb <-ggplot(merged$geometry)+
         geom_sf(aes(fill=merged$val)) + 
-        scale_fill_brewer(type = "seq", palette=1, direction = 1, aesthetics = "colour")
+        scale_fill_viridis_c()
       print(bb)
     
     })
@@ -181,7 +180,7 @@ Data <- R6Class("Data",
                   finalData_exactYear = NULL,
                   year = NULL,
                   # Constructor
-                  initialize = function(category = "", group = "", subgroup = "", additional = "", variableID = "", level ="", language = "pl") {
+                  initialize = function(category = "", group = "", subgroup = "", additional = "", variableID = "", level ="",language = "pl") {
                     self$category <- category
                     self$group <- group
                     self$subgroup <- subgroup
@@ -291,19 +290,10 @@ Data <- R6Class("Data",
                       sf_pow<-st_read("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\powiaty.shp")
                       self$finalData_exactYear$JPT_KOD_JE<-paste0(substr(self$finalData_exactYear$id, 3, 4), substr(self$finalData_exactYear$id, 8, 9))
                       merged <- merge(x = sf_pow, y = self$finalData_exactYear, by = "JPT_KOD_JE", all.x=TRUE)
-                      #merged$val <- cut(merged$val, breaks = 10)
-                      # quantiles <- quantile(merged$val, probs = seq(0, 1, by = 1/10), na.rm = TRUE)
-                      # 
-                      # bins <- cut(merged$val, breaks = quantiles, labels = FALSE, dig.lab = 5)
-                      # merged$val <- bins
-                      num_bins <- 10
-                      data_range <- range(merged$val, na.rm = TRUE)
-                      bin_width <- diff(data_range) / num_bins
-                      breaks <- seq(min(merged$val, na.rm = TRUE), max(merged$val, na.rm = TRUE) + bin_width, by = bin_width)
-                      bins <- cut(merged$val, breaks = breaks, labels = FALSE, include.lowest = TRUE)
-                      merged$val <- bins
+
+                      View(merged)
                       return(merged)
-                      
+
                     }
                     #gminy
                     if(self$level==6){
@@ -311,17 +301,6 @@ Data <- R6Class("Data",
                       self$finalData_exactYear$JPT_KOD_JE<-paste0(substr(self$finalData_exactYear$id, 3, 4), substr(self$finalData_exactYear$id, 8, 12))
                       merged <- merge(x = sf_gmi, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
                       View(self$finalData_exactYear)
-                      #merged$val <- cut(merged$val, breaks = 10)
-                      # quantiles <- quantile(merged$val, probs = seq(0, 1, by = 1/10), na.rm = TRUE)
-                      # 
-                      # bins <- cut(merged$val, breaks = quantiles, labels = FALSE, dig.lab = 5)
-                      # merged$val <- bins
-                      num_bins <- 10
-                      data_range <- range(merged$val, na.rm = TRUE)
-                      bin_width <- diff(data_range) / num_bins
-                      breaks <- seq(min(merged$val, na.rm = TRUE), max(merged$val, na.rm = TRUE) + bin_width, by = bin_width)
-                      bins <- cut(merged$val, breaks = breaks, labels = FALSE, include.lowest = TRUE)
-                      merged$val <- bins
                       return(merged)
                     }
                   }
@@ -421,7 +400,7 @@ available_data_group("K15")
 
 z123 <- available_data_subgroup("P3183")
 z123[z123$n1 == "1 kwartał", ]
-xx2<-get_data("76447","6")
+xx2<-get_data("60505","5")
 
 xx2
 
