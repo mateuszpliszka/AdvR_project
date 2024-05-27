@@ -10,6 +10,7 @@ library(raster)
 library(dplyr)
 options(scipen = 999)
 library(RColorBrewer)
+library(Rcpp)
 #To DO:
 # defensive - kiedy nie ma polaczenia z internetem
 # jesli n, n2 sie zmieni to odswiezyc
@@ -17,6 +18,7 @@ library(RColorBrewer)
 # problem page-size max - 100 - w trakcie rozwiazywania
 # rok najmniejszy - brak renderu
 # freezowanie apki podczas pobierania
+#RCPP UZYC
 #### Mateusz
 # jako jeden z paramtetrów wejsciowych moze byc tez poziom
 
@@ -43,8 +45,10 @@ ui <- fluidPage(
            actionButton(inputId = "Generate_plot", label = "Generate plot")
     ),
     column(width = 9,
-           div(style = "display: flex; align-items: center; justify-content: center; height: 90vh; width: 90%;",
-               plotOutput("mapPlot", width = "90%", height = "90%")
+           div(style = "display: flex; flex-direction: column; align-items: center; justify-content: center; height: 150vh; width: 100%;",
+               plotOutput("mapPlot", width = "90%", height = "150%"),
+               plotOutput("linePlot", width = "90%", height = "50%"),
+               plotOutput("linePPlot", width = "90%", height = "50%")
            )
     )
   )
@@ -163,10 +167,9 @@ server <- function(input, output, session) {
     output$mapPlot <- renderPlot({
       
       
-      bb <-ggplot(merged$geometry)+
+      ggplot(merged$geometry)+
         geom_sf(aes(fill=merged$val)) + 
         scale_fill_viridis_c()
-      print(bb)
     
     })
   })
@@ -177,8 +180,25 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$Generate_plot, {
-    print("Chce zrobić plot")
-    my_data_object$create_plot()
+    plot_data <-my_data_object$create_plot()
+    plot_data <- as.data.frame(plot_data)
+    View(plot_p_data)
+    output$linePlot <- renderPlot({
+     ggplot(plot_data, aes(x=year, group=1)) +
+        geom_line(aes(y=val.x, colour='Average')) +
+        geom_line(aes(y=val.y, colour='Chosen Unit'))
+    })
+    plot_p_data<-my_data_object$create_p_plot()
+    output$linePPlot <- renderPlot({
+      ggplot(plot_p_data, aes(x=year, group=1)) +
+        geom_line(aes(y=avg_pct_change, colour='avg_pct_change')) +
+        geom_line(aes(y=unit_pct_change, colour='unit_pct_change')) 
+    
+      
+    })
+    
+    
+    
   })
 }
 Data <- R6Class("Data",
@@ -322,7 +342,44 @@ Data <- R6Class("Data",
                     }
                   },
                   create_plot = function(){
-                    print("Ale Mateusz musi zrobic funkcje najpierw")
+                    average_data <- self$finalData_allYears %>%
+                      group_by(year) %>%
+                      summarize(val = mean(val)) %>%
+                      mutate(unit = "Average")
+                    plot_data_one <- self$finalData_allYears %>%
+                      filter(name==self$unit)
+                    plot_data <- merge(x = average_data, y = plot_data_one, by = "year", all.x = TRUE)
+                    return(plot_data)
+                  },
+                  create_p_plot = function(){
+                    average_p_data <- self$finalData_allYears %>%
+                      group_by(year) %>%
+                      summarize(val = mean(val)) %>%
+                      mutate(unit = "Average")
+                    plot_p_data_one <- self$finalData_allYears %>%
+                      filter(name==self$unit)
+                    plot_p_data <- merge(x = average_p_data, y = plot_p_data_one, by = "year", all.x = TRUE)
+                    cppFunction('
+                    NumericVector percentageChange(NumericVector values) {
+                      int n = values.size();
+                      NumericVector pct_change(n);
+                      
+                      // Set the first year percentage to 0%
+                      pct_change[0] = 0;
+                      
+                      for(int i = 1; i < n; i++) {
+                        pct_change[i] = (values[i] / values[i-1]) -1 ;
+                      }
+                      
+                      return pct_change;
+                    }')
+                    
+                    plot_p_data <- plot_p_data %>%
+                      mutate(
+                        unit_pct_change = percentageChange(val.y),
+                        avg_pct_change = percentageChange(val.x)
+                      )
+                    return(plot_p_data)
                   }
                   
                 ),
@@ -331,7 +388,6 @@ Data <- R6Class("Data",
 shinyApp(ui, server)
 
 
-?cut
 
 
 
