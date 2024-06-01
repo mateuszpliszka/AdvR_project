@@ -11,29 +11,49 @@ library(dplyr)
 options(scipen = 999)
 library(RColorBrewer)
 library(Rcpp)
+library(curl)
+library(shinybusy)
+
+
 #To DO:
-# defensive - kiedy nie ma polaczenia z internetem
-# jesli n, n2 sie zmieni to odswiezyc
-# limit zapytan zapezpieczenie
+# defensive - kiedy nie ma polaczenia z internetem (to chyba wtedy shiny wogole nie bedzie dzialalo na stronie wiec chyba nie problem ale zostawiam na pozniej)
 # problem page-size max - 100 - w trakcie rozwiazywania
-# rok najmniejszy - brak renderu
-# freezowanie apki podczas pobierania
 #RCPP UZYC
 #### Mateusz
 # jako jeden z paramtetrów wejsciowych moze byc tez poziom
 
 #srednia gmin w danym powiecie (np jeśli użytkownik wybierze dochod gmin policzyc srednia gmin dla kazdego
 #powiatu/woj i wtedy wyrenderować)
+# DODAC LADNE OPISY WYKRESOW
 
 Sys.setenv(LANG = "en")
 
 my_path <- getwd()
 
 ui <- fluidPage(
+  tags$head(
+    tags$style(
+      HTML(
+        "
+        .blocker {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background-color: transparent;
+          z-index: 9999;
+        }
+        "
+      )
+    )
+  ),
+  add_busy_spinner(spin = "fading-circle"), 
+  useShinyjs(),  
+  titlePanel("BDL Shiny App"),
   fluidRow(
     column(width = 3,
-           textInput(inputId = "X-ClientId", label = "X-ClientId"),
-           selectInput(inputId = "Category", label = "Category_1", choices = NULL),
+           selectInput(inputId = "Category", label = "Category", choices = NULL),
            selectInput(inputId = "Group", label = "Group", choices = NULL),
            selectInput(inputId = "Subgroup", label = "Subgroup", choices = NULL),
            uiOutput("additional_option_input"),
@@ -66,21 +86,24 @@ server <- function(input, output, session) {
     category_id <- input$Category
     data <- my_data_object$available_data_group(category_id)
     updateSelectInput(session, "Group", choices = setNames(data$id ,data$name))
-    print("Observer 1")
   })
   
   observeEvent(input$Group, {
     group_id <- input$Group
     data <- my_data_object$available_data_group(group_id)
     updateSelectInput(session, "Subgroup", choices = setNames(data$id ,data$name))
-    print("Observer 2")
   })
   
   observeEvent(input$Subgroup, {
     if (input$Subgroup != "")
     {
+      print("Tutaj1")
       subGroup_id <- input$Subgroup
+      print("Tutaj2")
+      shinyjs::runjs("$(document.body).append('<div class=\"blocker\"></div>');")
       data <- my_data_object$available_data_subgroup(subGroup_id)
+      shinyjs::runjs("$('.blocker').remove();")  
+      print("Tutaj3")
       if( "n3" %in% colnames(data)) {
         updateSelectInput(session, "Variable", choices = setNames(data$n3 ,data$n3))
         output$additional_option_input <- renderUI({
@@ -95,6 +118,7 @@ server <- function(input, output, session) {
         })
         updateSelectInput(session, "Additional_option_1", choices = setNames(data$n1 ,data$n1))
         updateSelectInput(session, "Additional_option_2", choices = setNames(data$n2, data$n2))
+         
         
       }
       else if( "n2" %in% colnames(data)) {
@@ -112,8 +136,8 @@ server <- function(input, output, session) {
         output$additional_option_input <- renderUI({})
         
       }
+      
     }
-    print("Observer 3")
   })
   
   observeEvent(c(input$Variable, input$Additional_option_1, input$Additional_option_2), {
@@ -135,54 +159,79 @@ server <- function(input, output, session) {
     
     level <- my_data_object$table[my_data_object$table$id == my_data_object$variableID,"level"]
     if (!is.null(level)) {
-      values <- c(0:level)
-      updateSelectInput(session, "Level", choices = setNames(values ,values))
+      values <- 0:level
+      specific_values <- c(0, 2, 5, 6)
+      values <- intersect(values, specific_values)
+      
+      specific_labels <- c("Polski", "Województw", "Powiatów", "Gmin")
+      value_label_map <- setNames(specific_labels, specific_values)
+      
+      labeled_values <- sapply(values, function(x) {
+        if (as.character(x) %in% names(value_label_map)) {
+          value_label_map[as.character(x)]
+        } else {
+          as.character(x)
+        }
+      })
+      
+      names(labeled_values) <- NULL
+      
+      updateSelectInput(session, "Level", choices = setNames(values, labeled_values))
     }
-    print("Observer 4")
-  })
-  
-  observeEvent(input$Level, {
-    my_data_object$level <- input$Level
+    my_data_object$level <- 0
     if (!is.null(my_data_object$level)) {
       my_data_object$finalData_allYears <- my_data_object$get_data(my_data_object$variableID,my_data_object$level)
       updateSelectInput(session, "Year", choices = setNames(my_data_object$finalData_allYears$year ,my_data_object$finalData_allYears$year))
       updateSelectInput(session, "select_unit", choices = setNames(my_data_object$finalData_allYears$name ,my_data_object$finalData_allYears$name))
     }
-    print(my_data_object$finalData_allYears)
-    print("Observer 5")
+    my_data_object$year <- input$Year
+    if (!is.null(my_data_object$year)) {
+      my_data_object$finalData_exactYear <- my_data_object$finalData_allYears[my_data_object$finalData_allYears$year == my_data_object$year, ]
+    }
+  })
+  
+  observeEvent(input$Level, {
+    my_data_object$level <- input$Level
+    if (!is.null(my_data_object$level)) {
+      shinyjs::runjs("$(document.body).append('<div class=\"blocker\"></div>');") 
+      my_data_object$finalData_allYears <- my_data_object$get_data(my_data_object$variableID,my_data_object$level)
+      updateSelectInput(session, "Year", choices = setNames(my_data_object$finalData_allYears$year ,my_data_object$finalData_allYears$year))
+      updateSelectInput(session, "select_unit", choices = setNames(my_data_object$finalData_allYears$name ,my_data_object$finalData_allYears$name))
+      shinyjs::runjs("$('.blocker').remove();")  
+    }
+    my_data_object$year <- input$Year
+    if (!is.null(my_data_object$year)) {
+      my_data_object$finalData_exactYear <- my_data_object$finalData_allYears[my_data_object$finalData_allYears$year == my_data_object$year, ]
+    }
   })
   
   observeEvent(input$Year, {
     my_data_object$year <- input$Year
     if (!is.null(my_data_object$year)) {
       my_data_object$finalData_exactYear <- my_data_object$finalData_allYears[my_data_object$finalData_allYears$year == my_data_object$year, ]
-      print(my_data_object$finalData_exactYear)
     }
-    print("Observer 6")
   })
    
   observeEvent(input$Generate_map, {
+    shinyjs::runjs("$(document.body).append('<div class=\"blocker\"></div>');")
+    
     merged <- my_data_object$create_map()
     
     output$mapPlot <- renderPlot({
-      
-      
       ggplot(merged$geometry)+
         geom_sf(aes(fill=merged$val)) + 
         scale_fill_viridis_c()
-    
     })
+    shinyjs::runjs("$('.blocker').remove();")  
   })
   
   observeEvent(input$select_unit, {
     my_data_object$unit <- input$select_unit
-    print(input$select_unit)
   })
   
   observeEvent(input$Generate_plot, {
     plot_data <-my_data_object$create_plot()
     plot_data <- as.data.frame(plot_data)
-    View(plot_p_data)
     output$linePlot <- renderPlot({
      ggplot(plot_data, aes(x=year, group=1)) +
         geom_line(aes(y=val.x, colour='Average')) +
@@ -234,9 +283,9 @@ Data <- R6Class("Data",
                   available_data = function() {
                     url <- "https://bdl.stat.gov.pl/api/v1/subjects?lang=pl&format=json&page-size=100"
                     response <- httr::GET(url)
+                    print(response)
                     data <- jsonlite::fromJSON(httr::content(response, "text", encoding = "UTF-8"))
                     print(data)
-                    # Extract content which we need
                     return(data$results[c("id", "name")])
                   },
                   
@@ -245,23 +294,31 @@ Data <- R6Class("Data",
                     url = paste0("https://bdl.stat.gov.pl/api/v1/subjects?lang=", self$language, "&parent-id=", parentId, "&format=json&page-size=100")
                     response <- GET(url)
                     data = fromJSON(rawToChar(response$content))
-                    # Extraction content which we need
                     return (data$results[c("id","name")])
                   },
                   
                   available_data_subgroup = function(parentId) {
                     self$group <- parentId
                     url = paste0("https://bdl.stat.gov.pl/api/v1/variables?lang=", self$language, "&subject-id=", parentId, "&format=json&page-size=100")
-                    response <- GET(url)
-                    data = fromJSON(rawToChar(response$content))
-                    self$table <- data$results
-                    if (is.element("n3", names(data$results))){
-                      (data$results[c("id","n1","n2","n3","level")])}
-                    else if (is.element("n2", names(data$results))){
-                      (data$results[c("id","n1","n2","level")])
+                    data <- self$multiplequeries(url,NULL)
+                    if (is.element("n3", names(data))){
+                      (data[c("id","n1","n2","n3","level")])}
+                    else if (is.element("n2", names(data))){
+                      (data[c("id","n1","n2","level")])
                     } else {
-                      (data$results[c("id","n1","level")])
+                      (data[c("id","n1","level")])
                     }
+                    self$table <- data
+                    #response <- GET(url)
+                    #data = fromJSON(rawToChar(response$content))
+                    #self$table <- data$results
+                    # if (is.element("n3", names(data$results))){
+                    #   (data$results[c("id","n1","n2","n3","level")])}
+                    # else if (is.element("n2", names(data$results))){
+                    #   (data$results[c("id","n1","n2","level")])
+                    # } else {
+                    #   (data$results[c("id","n1","level")])
+                    # }
                   },
                   get_data = function(id,level, client_id = NULL) {
                     url <- paste0("https://bdl.stat.gov.pl/api/v1/data/by-variable/", id ,"?unit-level=" , level, "&format=json&page-size=100")
@@ -293,8 +350,6 @@ Data <- R6Class("Data",
                         print(data$errors)
                         return (all_data)
                       }
-                      print(data$results)
-                      print(all_data)
                       all_data <- rbind(all_data, data$results)  
                       url <- data$links$`next`
 
@@ -304,9 +359,6 @@ Data <- R6Class("Data",
                   
                   create_map = function()
                   {
-    
-                    View(self$finalData_exactYear)
-                    print(self$level)
                     #wojewodztwa
                     if(self$level==2){
                       sf_woj<-st_read(paste0(my_path,"\\wojewodztwa.shp"))
@@ -327,8 +379,6 @@ Data <- R6Class("Data",
                       sf_pow<-st_read(paste0(my_path,"\\powiaty.shp"))
                       self$finalData_exactYear$JPT_KOD_JE<-paste0(substr(self$finalData_exactYear$id, 3, 4), substr(self$finalData_exactYear$id, 8, 9))
                       merged <- merge(x = sf_pow, y = self$finalData_exactYear, by = "JPT_KOD_JE", all.x=TRUE)
-
-                      View(merged)
                       return(merged)
 
                     }
@@ -337,7 +387,6 @@ Data <- R6Class("Data",
                       sf_gmi<-st_read(paste0(my_path,"\\gminy.shp"))
                       self$finalData_exactYear$JPT_KOD_JE<-paste0(substr(self$finalData_exactYear$id, 3, 4), substr(self$finalData_exactYear$id, 8, 12))
                       merged <- merge(x = sf_gmi, y = self$finalData_exactYear, by = "JPT_KOD_JE",all.x = TRUE)
-                      View(self$finalData_exactYear)
                       return(merged)
                     }
                   },
@@ -526,3 +575,34 @@ data = fromJSON(rawToChar(response$content))
 data
 mysf<-read_sf("C:\\Users\\mateu\\Desktop\\Studies\\AdvancedEconometrics\\Project\\AdvancedR_project\\wojewodztwa.shp")
 view(mysf)
+
+all_values <- 0:4
+specific_values <- c(0, 2, 5, 6)
+intersect(all_values,specific_values)
+filtered_values <- specific_values[specific_values <= 7]
+final_values <- unique(c(all_values, filtered_values))
+final_values
+
+specific_values <- c(0, 2, 5, 6)
+specific_labels <- c("kraj", "wojewodztwa", "powiaty", "gminy")
+
+# Create a named vector for mapping specific values to labels
+value_label_map <- setNames(specific_labels, specific_values)
+value_label_map
+numeric_values <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+
+# Zamiana liczb na etykiety, jeżeli istnieją w value_label_map, pominięcie pozostałych
+labeled_values <- sapply(numeric_values, function(x) {
+  if (as.character(x) %in% names(value_label_map)) {
+    value_label_map[as.character(x)]
+  } else {
+    NA
+  }
+})
+
+# Usunięcie wartości NA z wektora
+labeled_values <- labeled_values[!is.na(labeled_values)]
+names(labeled_values) <- NULL
+
+# Wyświetlanie wyników
+print(labeled_values)
