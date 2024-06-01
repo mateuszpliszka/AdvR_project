@@ -97,13 +97,10 @@ server <- function(input, output, session) {
   observeEvent(input$Subgroup, {
     if (input$Subgroup != "")
     {
-      print("Tutaj1")
       subGroup_id <- input$Subgroup
-      print("Tutaj2")
       shinyjs::runjs("$(document.body).append('<div class=\"blocker\"></div>');")
       data <- my_data_object$available_data_subgroup(subGroup_id)
       shinyjs::runjs("$('.blocker').remove();")  
-      print("Tutaj3")
       if( "n3" %in% colnames(data)) {
         updateSelectInput(session, "Variable", choices = setNames(data$n3 ,data$n3))
         output$additional_option_input <- renderUI({
@@ -283,9 +280,7 @@ Data <- R6Class("Data",
                   available_data = function() {
                     url <- "https://bdl.stat.gov.pl/api/v1/subjects?lang=pl&format=json&page-size=100"
                     response <- httr::GET(url)
-                    print(response)
                     data <- jsonlite::fromJSON(httr::content(response, "text", encoding = "UTF-8"))
-                    print(data)
                     return(data$results[c("id", "name")])
                   },
                   
