@@ -1,0 +1,13 @@
+name: AdvancedR_project123
+title: AdvancedR_project123
+username: lukaszjanisiow
+account: lukaszjanisiow
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 12108682
+bundleId: 8688030
+url: https://lukaszjanisiow.shinyapps.io/AdvancedR_project123/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: projekt_vol1.R|README.md|testowaniemapek.R|testtesttest.R
